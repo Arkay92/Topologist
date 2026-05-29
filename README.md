@@ -1,5 +1,9 @@
 # Topologist
 
+<p align="center">
+  <img width="300" height="300" alt="" src="assets/topologist-logo.svg" />
+</p>
+
 A production-hardened **hyperdimensional neuro-symbolic topology system** in Python.
 
 Topologist combines:
