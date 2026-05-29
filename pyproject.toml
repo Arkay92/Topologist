@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "topologist"
-version = "0.1.5"
+version = "0.1.6"
 description = "A production-hardened hyperdimensional neuro-symbolic topology system."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,10 +42,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/EasyTees/Topologist"
-Repository = "https://github.com/EasyTees/Topologist"
-Documentation = "https://github.com/EasyTees/Topologist#readme"
-Issues = "https://github.com/EasyTees/Topologist/issues"
+Homepage = "https://github.com/Topologist"
+Repository = "https://github.com/Topologist"
+Documentation = "https://github.com/Topologist#readme"
+Issues = "https://github.com/Topologist/issues"
 
 [project.scripts]
 topologist = "topologist.cli:app"
