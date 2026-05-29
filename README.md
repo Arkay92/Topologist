@@ -36,10 +36,7 @@ Each node and relation is stored symbolically, but also encoded into a high-dime
 ## Install
 
 ```bash
-cd topologist
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install topologist
 ```
 
 For development without installing, ensure the package is in the Python path:
