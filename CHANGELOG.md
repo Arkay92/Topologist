@@ -2,8 +2,11 @@
 
 All notable changes to Topologist are documented here.
 
-## 0.1.11
+## 0.2.0
 
+- Added provenance records for edges, including source type, evidence, timestamps, reinforcement count, decay policy, trust score, and derived-rule traces.
+- Added `Topologist.explain_edge()` for direct and inferred relations.
+- Preserved provenance through JSON, SQLite, and Postgres persistence.
 - Added focused tests for DSL parsing, persistence, streaming, CLI, and FastAPI service behavior.
 - Added package validation to CI with `python -m build` and `twine check dist/*`.
 - Switched the publish workflow to PyPI Trusted Publishing.

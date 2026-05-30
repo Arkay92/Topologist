@@ -7,7 +7,7 @@ from topologist.config import TopologistConfig
 from topologist.dsl import MultiHopRule, RuleDSL
 from topologist.engine import Topologist
 from topologist.hdc import HyperVectorSpace
-from topologist.models import EdgeRecord, NodeRecord, ReasoningRule
+from topologist.models import EdgeRecord, NodeRecord, ProvenanceRecord, ReasoningRule
 from topologist.persistence import PostgresPersistenceAdapter, SQLitePersistenceAdapter
 from topologist.service import create_app
 from topologist.streaming import EventStreamAdapter, KafkaStreamAdapter, RedisStreamAdapter, WebSocketStreamAdapter
@@ -19,6 +19,7 @@ __all__ = [
     "HyperVectorSpace",
     "NodeRecord",
     "EdgeRecord",
+    "ProvenanceRecord",
     "ReasoningRule",
     "MultiHopRule",
     "RuleDSL",
@@ -42,4 +43,4 @@ try:
 
     __version__ = version("topologist")
 except Exception:
-    __version__ = "0.1.11"
+    __version__ = "0.2.0"

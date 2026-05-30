@@ -62,10 +62,19 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
                     target TEXT NOT NULL,
                     weight REAL NOT NULL,
                     confidence REAL NOT NULL,
-                    metadata TEXT NOT NULL
+                    metadata TEXT NOT NULL,
+                    provenance TEXT NOT NULL DEFAULT '{}'
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in self.connection.execute("PRAGMA table_info(edges)").fetchall()
+            }
+            if "provenance" not in columns:
+                self.connection.execute(
+                    "ALTER TABLE edges ADD COLUMN provenance TEXT NOT NULL DEFAULT '{}'"
+                )
             self.connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS snapshots (
@@ -107,7 +116,11 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
             # save edges
             for source, target, data in topology.graph.edges(data=True):
                 self.connection.execute(
-                    "INSERT INTO edges (source, relation, target, weight, confidence, metadata) VALUES (?, ?, ?, ?, ?, ?)",
+                    """
+                    INSERT INTO edges
+                    (source, relation, target, weight, confidence, metadata, provenance)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
                     (
                         source,
                         data.get("relation", "related_to"),
@@ -115,6 +128,7 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
                         float(data.get("weight", 1.0)),
                         float(data.get("confidence", 1.0)),
                         json.dumps(data.get("metadata", {})),
+                        json.dumps(data.get("provenance", {})),
                     ),
                 )
 
@@ -155,8 +169,8 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
             topology.add_node(name, kind, **json.loads(metadata_json))
 
         # load edges
-        for source, relation, target, weight, confidence, metadata_json in cursor.execute(
-            "SELECT source, relation, target, weight, confidence, metadata FROM edges"
+        for source, relation, target, weight, confidence, metadata_json, provenance_json in cursor.execute(
+            "SELECT source, relation, target, weight, confidence, metadata, provenance FROM edges"
         ):
             topology.add_edge(
                 source,
@@ -164,6 +178,7 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
                 target,
                 weight=weight,
                 confidence=confidence,
+                provenance=json.loads(provenance_json),
                 **json.loads(metadata_json),
             )
 
@@ -236,9 +251,13 @@ class PostgresPersistenceAdapter(PersistenceAdapter):
                     target TEXT NOT NULL,
                     weight REAL NOT NULL,
                     confidence REAL NOT NULL,
-                    metadata TEXT NOT NULL
+                    metadata TEXT NOT NULL,
+                    provenance TEXT NOT NULL DEFAULT '{}'
                 )
                 """
+            )
+            cursor.execute(
+                "ALTER TABLE edges ADD COLUMN IF NOT EXISTS provenance TEXT NOT NULL DEFAULT '{}'"
             )
             cursor.execute(
                 """
@@ -282,7 +301,11 @@ class PostgresPersistenceAdapter(PersistenceAdapter):
             # save edges
             for source, target, data in topology.graph.edges(data=True):
                 cursor.execute(
-                    "INSERT INTO edges (source, relation, target, weight, confidence, metadata) VALUES (%s, %s, %s, %s, %s, %s)",
+                    """
+                    INSERT INTO edges
+                    (source, relation, target, weight, confidence, metadata, provenance)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
                     (
                         source,
                         data.get("relation", "related_to"),
@@ -290,6 +313,7 @@ class PostgresPersistenceAdapter(PersistenceAdapter):
                         float(data.get("weight", 1.0)),
                         float(data.get("confidence", 1.0)),
                         json.dumps(data.get("metadata", {})),
+                        json.dumps(data.get("provenance", {})),
                     ),
                 )
 
@@ -333,15 +357,16 @@ class PostgresPersistenceAdapter(PersistenceAdapter):
 
             # load edges
             cursor.execute(
-                "SELECT source, relation, target, weight, confidence, metadata FROM edges"
+                "SELECT source, relation, target, weight, confidence, metadata, provenance FROM edges"
             )
-            for source, relation, target, weight, confidence, metadata_json in cursor.fetchall():
+            for source, relation, target, weight, confidence, metadata_json, provenance_json in cursor.fetchall():
                 topology.add_edge(
                     source,
                     relation,
                     target,
                     weight=weight,
                     confidence=confidence,
+                    provenance=json.loads(provenance_json),
                     **json.loads(metadata_json),
                 )
 

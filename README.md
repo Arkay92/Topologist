@@ -21,6 +21,7 @@ Topologist combines:
 - **Neuro-symbolic graph topology** using NetworkX.
 - **Rule-based inference** over symbolic relations.
 - **Topology analytics** including PageRank centrality, communities, shortest paths, drift, and anomaly scoring.
+- **Provenance-first memory** with edge evidence, trust, reinforcement count, timestamps, and explanations.
 - **Persistence and export** to JSON, SQLite, Postgres, GraphML, and Mermaid.
 - **CLI, FastAPI, streaming, ANN, tracing, and agent-memory adapters** for production-facing workflows.
 
@@ -235,6 +236,25 @@ The scoring method:
 ### 6. Persistence and service adapters
 
 Topologist supports JSON, SQLite, Postgres, FastAPI, Kafka, Redis Streams, WebSocket ingestion, OpenTelemetry tracing, approximate nearest neighbors, and agent-memory persistence.
+
+### 7. Provenance and reasoning traces
+
+Edges carry provenance metadata so agent memory and streaming systems can explain why a relation exists:
+
+```python
+topology.add_edge(
+    "A",
+    "supports",
+    "B",
+    source_type="sensor",
+    evidence=["event-123"],
+    trust_score=0.8,
+)
+
+topology.explain_edge("A", "supports", "B")
+```
+
+Inferred edges include the rule and evidence path used to derive them.
 
 ---
 

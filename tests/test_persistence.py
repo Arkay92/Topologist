@@ -12,7 +12,15 @@ from topologist.persistence import PostgresPersistenceAdapter, SQLitePersistence
 def test_sqlite_roundtrip_preserves_config_hdc_memory_and_snapshots(tmp_path: Path) -> None:
     topo = Topologist(TopologistConfig(dim=1024, seed=123, max_snapshots=3))
     topo.add_node("Memory", "concept", domain="cognitive")
-    topo.add_edge("HDC", "models", "Memory", confidence=0.8, evidence_source="paper")
+    topo.add_edge(
+        "HDC",
+        "models",
+        "Memory",
+        confidence=0.8,
+        source_type="user",
+        evidence=["paper"],
+        evidence_source="paper",
+    )
     expected_state = topo.update_global_state(take_snapshot=True).copy()
     expected_memory = {key: value.copy() for key, value in topo.hdc.item_memory.items()}
 
@@ -24,6 +32,10 @@ def test_sqlite_roundtrip_preserves_config_hdc_memory_and_snapshots(tmp_path: Pa
     assert loaded.config == topo.config
     assert loaded.graph.number_of_nodes() == topo.graph.number_of_nodes()
     assert loaded.graph.number_of_edges() == topo.graph.number_of_edges()
+    explanation = loaded.explain_edge("HDC", "models", "Memory")
+    assert explanation is not None
+    assert explanation["source_type"] == "user"
+    assert explanation["evidence"] == ["paper"]
     assert len(loaded.snapshots) == 1
     assert loaded.hdc.item_memory.keys() == expected_memory.keys()
     for key, vector in expected_memory.items():

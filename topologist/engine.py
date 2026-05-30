@@ -11,7 +11,7 @@ import numpy as np
 from topologist.config import TopologistConfig
 from topologist.exceptions import NodeNotFoundError, PersistenceError
 from topologist.hdc import BipolarVector, HyperVectorSpace
-from topologist.models import EdgeRecord, NodeRecord, ReasoningRule
+from topologist.models import EdgeRecord, NodeRecord, ProvenanceRecord, ReasoningRule, utc_now
 
 if TYPE_CHECKING:
     from topologist.dsl import MultiHopRule
@@ -56,8 +56,24 @@ class Topologist:
         target: str,
         weight: float | None = None,
         confidence: float | None = None,
+        source_type: str = "api",
+        evidence: list[str] | None = None,
+        decay_policy: str = "default",
+        trust_score: float = 1.0,
+        provenance: ProvenanceRecord | dict[str, Any] | None = None,
         **metadata: Any,
     ) -> bool:
+        rule_metadata = metadata.get("rule")
+        provenance_record = self._build_provenance(
+            source_type=source_type,
+            evidence=evidence,
+            decay_policy=decay_policy,
+            trust_score=trust_score,
+            provenance=provenance,
+            derived=bool(metadata.get("inferred", False) or rule_metadata),
+            rule=rule_metadata if isinstance(rule_metadata, dict) else None,
+            evidence_path=metadata.get("evidence_path"),
+        )
         record = EdgeRecord(
             source=source,
             relation=relation,
@@ -65,6 +81,7 @@ class Topologist:
             weight=self.config.default_weight if weight is None else weight,
             confidence=self.config.default_confidence if confidence is None else confidence,
             metadata=metadata,
+            provenance=provenance_record,
         )
         if record.source not in self.graph:
             self.add_node(record.source)
@@ -83,6 +100,7 @@ class Topologist:
                 record.target,
                 record.relation,
                 record.confidence,
+                record.provenance,
             )
             logger.debug(
                 "Updated confidence for edge %s --%s--> %s to %.3f",
@@ -100,6 +118,7 @@ class Topologist:
             weight=record.weight,
             confidence=record.confidence,
             metadata=record.metadata,
+            provenance=record.provenance.model_dump(mode="json"),
             hv=hv,
         )
         self.global_state = None
@@ -149,14 +168,69 @@ class Topologist:
         target: str,
         relation: str,
         new_confidence: float,
+        new_provenance: ProvenanceRecord,
     ) -> None:
         """Update an existing edge's confidence to the max of current and new."""
         edge_data = self.graph.get_edge_data(source, target, default={})
         for data in edge_data.values():
             if data.get("relation") == relation:
                 data["confidence"] = max(float(data.get("confidence", 1.0)), new_confidence)
+                data["provenance"] = self._merge_provenance(
+                    data.get("provenance", {}),
+                    new_provenance,
+                )
                 self.global_state = None
                 return
+
+    def _build_provenance(
+        self,
+        *,
+        source_type: str,
+        evidence: list[str] | None,
+        decay_policy: str,
+        trust_score: float,
+        provenance: ProvenanceRecord | dict[str, Any] | None,
+        derived: bool,
+        rule: dict[str, Any] | None,
+        evidence_path: Any,
+    ) -> ProvenanceRecord:
+        if isinstance(provenance, ProvenanceRecord):
+            record = provenance
+        elif isinstance(provenance, dict):
+            record = ProvenanceRecord(**provenance)
+        else:
+            path = evidence_path if isinstance(evidence_path, list) else []
+            record = ProvenanceRecord(
+                source_type=source_type,
+                evidence=evidence or [],
+                decay_policy=decay_policy,
+                trust_score=trust_score,
+                derived=derived,
+                rule=rule,
+                evidence_path=path,
+            )
+        return record
+
+    def _merge_provenance(
+        self,
+        existing: ProvenanceRecord | dict[str, Any],
+        incoming: ProvenanceRecord,
+    ) -> dict[str, Any]:
+        record = (
+            existing
+            if isinstance(existing, ProvenanceRecord)
+            else ProvenanceRecord(**existing)
+        )
+        evidence = list(dict.fromkeys([*record.evidence, *incoming.evidence]))
+        merged = record.model_copy(
+            update={
+                "updated_at": utc_now(),
+                "reinforcement_count": record.reinforcement_count + 1,
+                "evidence": evidence,
+                "trust_score": max(record.trust_score, incoming.trust_score),
+            }
+        )
+        return merged.model_dump(mode="json")
 
     # -----------------------------
     # HDC state and snapshots
@@ -224,12 +298,13 @@ class Topologist:
                 "weight": data.get("weight", 1.0),
                 "confidence": data.get("confidence", 1.0),
                 "metadata": data.get("metadata", {}),
+                "provenance": data.get("provenance", {}),
             }
             for source, target, data in self.graph.out_edges(node, data=True)
         ]
 
     def apply_rule(self, rule: ReasoningRule) -> int:
-        proposed: list[tuple[str, str, str, float]] = []
+        proposed: list[tuple[str, str, str, float, list[list[str]]]] = []
         for a, b, data_ab in self.graph.edges(data=True):
             if data_ab.get("relation") != rule.relation_a:
                 continue
@@ -238,16 +313,22 @@ class Topologist:
                     continue
                 confidence = data_ab.get("confidence", 1.0) * data_bc.get("confidence", 1.0)
                 if confidence >= rule.min_confidence:
-                    proposed.append((a, rule.inferred_relation, c, confidence))
+                    evidence_path = [
+                        [str(a), str(data_ab.get("relation", rule.relation_a)), str(b)],
+                        [str(b), str(data_bc.get("relation", rule.relation_b)), str(c)],
+                    ]
+                    proposed.append((a, rule.inferred_relation, c, confidence, evidence_path))
         created = 0
-        for source, relation, target, confidence in proposed:
+        for source, relation, target, confidence, evidence_path in proposed:
             if self.add_edge(
                 source,
                 relation,
                 target,
                 confidence=confidence,
+                source_type="rule",
                 inferred=True,
                 rule=rule.model_dump(),
+                evidence_path=evidence_path,
             ):
                 created += 1
         return created
@@ -275,31 +356,45 @@ class Topologist:
 
     def apply_multi_hop_rule(self, rule: "MultiHopRule") -> int:
         created = 0
-        proposals: list[tuple[str, str, float]] = []
+        proposals: list[tuple[str, str, float, list[list[str]]]] = []
 
-        def traverse(current_node: str, relation_index: int, confidence: float, start_node: str) -> None:
+        def traverse(
+            current_node: str,
+            relation_index: int,
+            confidence: float,
+            start_node: str,
+            evidence_path: list[list[str]],
+        ) -> None:
             if relation_index >= len(rule.relation_sequence):
                 if confidence >= rule.min_confidence:
-                    proposals.append((start_node, current_node, confidence))
+                    proposals.append((start_node, current_node, confidence, evidence_path))
                 return
             relation = rule.relation_sequence[relation_index]
             for _, next_node, data in self.graph.out_edges(current_node, data=True):
                 if data.get("relation") != relation:
                     continue
                 next_confidence = confidence * float(data.get("confidence", 1.0))
-                traverse(next_node, relation_index + 1, next_confidence, start_node)
+                traverse(
+                    next_node,
+                    relation_index + 1,
+                    next_confidence,
+                    start_node,
+                    [*evidence_path, [current_node, relation, str(next_node)]],
+                )
 
         for start_node in list(self.graph.nodes()):
-            traverse(start_node, 0, 1.0, start_node)
+            traverse(str(start_node), 0, 1.0, str(start_node), [])
 
-        for source, target, confidence in proposals:
+        for source, target, confidence, evidence_path in proposals:
             if self.add_edge(
                 source,
                 rule.inferred_relation,
                 target,
                 confidence=confidence,
+                source_type="rule",
                 inferred=True,
                 rule=rule.model_dump(),
+                evidence_path=evidence_path,
             ):
                 created += 1
 
@@ -360,6 +455,31 @@ class Topologist:
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return None
 
+    def explain_edge(self, source: str, relation: str, target: str) -> dict[str, Any] | None:
+        edge_data = self.graph.get_edge_data(source, target, default={})
+        for data in edge_data.values():
+            if data.get("relation") != relation:
+                continue
+            provenance = ProvenanceRecord(**data.get("provenance", {}))
+            return {
+                "edge": f"{source} --{relation}--> {target}",
+                "source": source,
+                "relation": relation,
+                "target": target,
+                "derived": provenance.derived,
+                "rule": provenance.rule,
+                "confidence": data.get("confidence", 1.0),
+                "evidence": provenance.evidence,
+                "evidence_path": provenance.evidence_path,
+                "source_type": provenance.source_type,
+                "trust_score": provenance.trust_score,
+                "reinforcement_count": provenance.reinforcement_count,
+                "created_at": provenance.created_at.isoformat(),
+                "updated_at": provenance.updated_at.isoformat(),
+                "metadata": data.get("metadata", {}),
+            }
+        return None
+
     def relation_anomaly_score(self, source: str, relation: str, target: str) -> float:
         """Compute an anomaly score for a candidate relation using unbinding.
 
@@ -419,7 +539,7 @@ class Topologist:
                 name=node,
                 kind=data.get("kind", "concept"),
                 metadata=data.get("metadata", {}),
-            ).model_dump()
+            ).model_dump(mode="json")
             for node, data in self.graph.nodes(data=True)
         ]
         edges = [
@@ -430,7 +550,8 @@ class Topologist:
                 weight=float(data.get("weight", 1.0)),
                 confidence=float(data.get("confidence", 1.0)),
                 metadata=data.get("metadata", {}),
-            ).model_dump()
+                provenance=ProvenanceRecord(**data.get("provenance", {})),
+            ).model_dump(mode="json")
             for source, target, data in self.graph.edges(data=True)
         ]
         payload: dict[str, Any] = {
@@ -460,6 +581,7 @@ class Topologist:
                 edge_record.target,
                 weight=edge_record.weight,
                 confidence=edge_record.confidence,
+                provenance=edge_record.provenance,
                 **edge_record.metadata,
             )
         engine.snapshots = [np.asarray(snapshot, dtype=np.int8) for snapshot in payload.get("snapshots", [])]

@@ -30,15 +30,81 @@ def test_rule_inference() -> None:
     assert topo.shortest_path("A", "C") is not None
 
 
+def test_edge_provenance_and_reinforcement() -> None:
+    topo = Topologist()
+    created = topo.add_edge(
+        "A",
+        "supports",
+        "B",
+        confidence=0.6,
+        source_type="sensor",
+        evidence=["event-1"],
+        trust_score=0.7,
+    )
+    reinforced = topo.add_edge(
+        "A",
+        "supports",
+        "B",
+        confidence=0.8,
+        source_type="sensor",
+        evidence=["event-2"],
+        trust_score=0.9,
+    )
+
+    explanation = topo.explain_edge("A", "supports", "B")
+
+    assert created is True
+    assert reinforced is False
+    assert explanation is not None
+    assert explanation["source_type"] == "sensor"
+    assert explanation["confidence"] == pytest.approx(0.8)
+    assert explanation["trust_score"] == pytest.approx(0.9)
+    assert explanation["reinforcement_count"] == 2
+    assert explanation["evidence"] == ["event-1", "event-2"]
+    assert explanation["derived"] is False
+
+
+def test_explain_inferred_edge_contains_reasoning_trace() -> None:
+    topo = Topologist()
+    topo.add_edge("A", "causes", "B", confidence=0.9)
+    topo.add_edge("B", "causes", "C", confidence=0.9)
+    rule = ReasoningRule(
+        relation_a="causes",
+        relation_b="causes",
+        inferred_relation="indirectly_causes",
+        min_confidence=0.5,
+    )
+
+    assert topo.apply_rule(rule) == 1
+    explanation = topo.explain_edge("A", "indirectly_causes", "C")
+
+    assert explanation is not None
+    assert explanation["derived"] is True
+    assert explanation["source_type"] == "rule"
+    assert explanation["confidence"] == pytest.approx(0.81)
+    assert explanation["rule"]["inferred_relation"] == "indirectly_causes"
+    assert explanation["evidence_path"] == [
+        ["A", "causes", "B"],
+        ["B", "causes", "C"],
+    ]
+
+
+def test_explain_edge_returns_none_for_missing_edge() -> None:
+    topo = Topologist()
+
+    assert topo.explain_edge("A", "missing", "B") is None
+
+
 def test_save_load_roundtrip(tmp_path: Path) -> None:
     topo = Topologist()
-    topo.add_edge("HDC", "models", "Memory")
+    topo.add_edge("HDC", "models", "Memory", source_type="user", evidence=["readme"])
     topo.update_global_state(take_snapshot=True)
     path = tmp_path / "topology.json"
     topo.save(path)
     loaded = Topologist.load(path)
     assert loaded.graph.number_of_nodes() == topo.graph.number_of_nodes()
     assert loaded.graph.number_of_edges() == topo.graph.number_of_edges()
+    assert loaded.explain_edge("HDC", "models", "Memory")["source_type"] == "user"
 
 
 def test_decay_confidence() -> None:
