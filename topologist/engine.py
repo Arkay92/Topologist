@@ -270,7 +270,8 @@ class Topologist:
 
         def traverse(current_node: str, relation_index: int, confidence: float, start_node: str) -> None:
             if relation_index >= len(rule.relation_sequence):
-                proposals.append((start_node, current_node, confidence))
+                if confidence >= rule.min_confidence:
+                    proposals.append((start_node, current_node, confidence))
                 return
             relation = rule.relation_sequence[relation_index]
             for _, next_node, data in self.graph.out_edges(current_node, data=True):
@@ -351,60 +352,44 @@ class Topologist:
             return None
 
     def relation_anomaly_score(self, source: str, relation: str, target: str) -> float:
-        """Compute an anomaly score for a candidate relation by comparing it
-        against local topology (source outgoing edges, target incoming edges)
-        and relation-type vector. Returns anomaly in range [0, 1], where 1 is
-        most anomalous.
+        """Compute an anomaly score for a candidate relation using unbinding.
+
+        Rather than comparing the bound relation (source*relation*target) to
+        individual components, we unbind the candidate and recover the
+        relation signal. This is more mathematically sound in VSA/HDC.
+
+        The recovered relation is compared against:
+        1. The expected relation hypervector
+        2. Local topology bundles (outgoing from source, incoming to target)
+
+        Returns anomaly in range [0, 1], where 1 is most anomalous.
         """
         candidate = self.hdc.encode_relation(source, relation, target)
+        source_hv = self.hdc.get(f"node::{source}")
+        target_hv = self.hdc.get(f"node::{target}")
+        expected_relation_hv = self.hdc.get(f"relation::{relation}")
 
-        # build local outgoing bundle from source
-        outs: list[BipolarVector] = []
+        # unbind to recover relation signal: bind(bind(candidate, source), target)
+        recovered_relation = self.hdc.bind(self.hdc.bind(candidate, source_hv), target_hv)
+        relation_score = self.hdc.similarity(recovered_relation, expected_relation_hv)
+
+        # compare against local topology
+        local_scores: list[float] = []
         for _, _, data in self.graph.out_edges(source, data=True):
             edge_hv = data.get("hv")
-            try:
-                conf = float(data.get("confidence", 1.0))
-            except Exception:
-                conf = 1.0
-            conf_hv = self.hdc.encode_confidence(conf)
-            outs.append(self.hdc.bind(edge_hv, conf_hv))
+            if edge_hv is not None:
+                local_scores.append(self.hdc.similarity(candidate, edge_hv))
 
-        # build local incoming bundle to target
-        ins: list[BipolarVector] = []
         for _, _, data in self.graph.in_edges(target, data=True):
             edge_hv = data.get("hv")
-            try:
-                conf = float(data.get("confidence", 1.0))
-            except Exception:
-                conf = 1.0
-            conf_hv = self.hdc.encode_confidence(conf)
-            ins.append(self.hdc.bind(edge_hv, conf_hv))
+            if edge_hv is not None:
+                local_scores.append(self.hdc.similarity(candidate, edge_hv))
 
-        # relation template vector
-        relation_hv = self.hdc.get(f"relation::{relation}")
+        best_local = max(local_scores, default=0.0)
+        best_score = max(relation_score, best_local)
 
-        # helper to bundle or make zero-vector
-        def _bundle_or_zero(vs: list[BipolarVector]) -> BipolarVector:
-            if vs:
-                return self.hdc.bundle(vs)
-            return np.zeros(self.hdc.dim, dtype=np.int8)
-
-        s_bundle = _bundle_or_zero(outs)
-        t_bundle = _bundle_or_zero(ins)
-
-        # compare candidate to local bundles and relation prototype
-        scores = [
-            self.hdc.similarity(candidate, s_bundle),
-            self.hdc.similarity(candidate, t_bundle),
-            self.hdc.similarity(candidate, relation_hv),
-        ]
-
-        # Use the strongest local match as evidence; anomaly inversely
-        # proportional to the max similarity. Clamp to [0, 1] since cosine
-        # similarity can be negative in bipolar space.
-        best_sim = max(scores)
-        score = 1.0 - best_sim
-        return max(0.0, min(1.0, score))
+        # anomaly is inverse of best match, clamped to [0, 1]
+        return max(0.0, min(1.0, 1.0 - best_score))
 
     def is_anomalous_relation(self, source: str, relation: str, target: str) -> bool:
         return self.relation_anomaly_score(source, relation, target) >= self.config.anomaly_threshold

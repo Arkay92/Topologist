@@ -169,13 +169,20 @@ This lets you measure how much the topology has changed over time.
 
 ### 5. Anomaly scoring
 
-Candidate relations can be compared against the global topology state:
+Candidate relations can be compared against local topology and relation prototypes using unbinding:
 
 ```python
 score = system.relation_anomaly_score("A", "unexpected_relation", "B")
 ```
 
-Higher scores mean the relation is less aligned with the current topology memory.
+The scoring method:
+
+1. **Unbinds** the candidate relation to recover the relation signal
+2. Compares against the **expected relation hypervector**
+3. Checks similarity to **local topology edges** (source outgoing, target incoming)
+4. Returns anomaly in [0, 1], where 1 is most anomalous
+
+Higher scores indicate relations that deviate from learned patterns.
 
 ### 6. Confidence decay
 
@@ -193,24 +200,23 @@ This is useful for agent memory, dynamic knowledge graphs, cybersecurity events,
 
 ```text
 topologist/
-├── topologist/
-│   ├── __init__.py
-│   ├── cli.py
-│   ├── config.py
-│   ├── engine.py
-│   ├── exceptions.py
-│   ├── hdc.py
-│   ├── io.py
-│   ├── models.py
-│   └── visualization.py
-├── examples/
-│   ├── demo.py
-│   └── streaming_topology.py
-├── tests/
-│   ├── test_engine.py
-│   └── test_hdc.py
-├── pyproject.toml
-└── README.md
+├── __init__.py
+├── agent.py                # Agent memory adapters (Claude, OpenClaw, local LLM)
+├── ann.py                  # Approximate nearest-neighbor search
+├── bridges.py              # PyTorch Geometric bridge for GNN integration
+├── cli.py                  # CLI commands (demo, inspect, mermaid export)
+├── config.py               # Runtime configuration
+├── dsl.py                  # Rule DSL for multi-hop inference
+├── engine.py               # Core topology engine
+├── exceptions.py           # Custom exception types
+├── hdc.py                  # Hyperdimensional computing & vector operations
+├── io.py                   # CSV load/save utilities
+├── models.py               # Pydantic models (Node, Edge, Rule records)
+├── persistence.py          # SQLite/Postgres persistence adapters
+├── service.py              # FastAPI service wrapper
+├── streaming.py            # Kafka/Redis Streams/WebSocket adapters
+├── tracing.py              # OpenTelemetry tracing support
+└── visualization.py        # Mermaid & GraphML export
 ```
 
 ---

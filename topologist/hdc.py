@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import math
 import numpy as np
 from numpy.typing import NDArray
 
@@ -78,24 +77,24 @@ class HyperVectorSpace:
             vectors.append(self.bind(role, self.get(symbol)))
         return self.bundle(vectors)
 
-    def encode_confidence(self, confidence: float) -> BipolarVector:
-        """Encode a continuous confidence value as a permuted base vector.
+    def encode_confidence(self, confidence: float, bands: int = 10) -> BipolarVector:
+        """Encode confidence as a quantized band vector for stable topology drift.
 
-        Confidence is expected in [0.0, 1.0]. We create a base confidence
-        vector in item memory and apply a cyclic permutation proportional to
-        the confidence value. This gives a smooth, continuous encoding that
-        changes as confidence decays.
+        Confidence is expected in [0.0, 1.0]. We discretize into N bands and
+        return a stable level hypervector. This is more stable than cyclic
+        permutation, which can create large jumps for tiny confidence changes.
+
+        Example:
+            confidence=0.15 → band 1 out of 10
+            confidence=0.85 → band 8 out of 10
         """
         try:
             c = float(confidence)
         except Exception:
             c = 1.0
         c = max(0.0, min(1.0, c))
-        base = self.get("confidence::base")
-        # map confidence to integer shift within [0, dim-1]
-        # avoid round() overload ambiguity by using explicit float math
-        shift = math.floor(float(c) * (self.dim - 1) + 0.5)
-        return self.permute(base, shift)
+        band_idx = int(round(c * (bands - 1)))
+        return self.get(f"confidence::band::{band_idx}")
 
     def to_jsonable(self) -> dict[str, object]:
         return {

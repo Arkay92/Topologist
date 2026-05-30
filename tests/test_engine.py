@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from topologist import Topologist
 from topologist.models import ReasoningRule
 
@@ -87,15 +89,15 @@ def test_inferred_edge_deduplication_with_confidence_update() -> None:
     assert edge_2["confidence"] == conf_1
 
 
-def test_confidence_decay_changes_global_state() -> None:
+def test_confidence_decay_reduces_confidence_values() -> None:
     topo = Topologist()
     topo.add_edge("A", "rel", "B", confidence=1.0)
-    topo.update_global_state(take_snapshot=True)
-    # snapshot[0] exists
+    before = topo.neighbors("A")[0]["confidence"]
+    assert before == 1.0
     topo.decay_confidence()
-    topo.update_global_state(take_snapshot=True)
-    # drift should be non-zero after confidence decay
-    assert topo.topology_drift() > 0.0
+    after = topo.neighbors("A")[0]["confidence"]
+    assert after < 1.0
+    assert after == pytest.approx(0.98)
 
 
 def test_rule_inference_is_idempotent() -> None:

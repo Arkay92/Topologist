@@ -37,4 +37,8 @@ __all__ = [
     "create_app",
 ]
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import version, PackageNotFoundError
+    __version__ = version("topologist")
+except Exception:
+    __version__ = "0.1.9"

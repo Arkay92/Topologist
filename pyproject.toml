@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "topologist"
-version = "0.1.8"
+version = "0.1.9"
 description = "A production-hardened hyperdimensional neuro-symbolic topology system."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -66,10 +66,10 @@ db = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Topologist"
-Repository = "https://github.com/Topologist"
-Documentation = "https://github.com/Topologist#readme"
-Issues = "https://github.com/Topologist/issues"
+Homepage = "https://github.com/Arkay92/Topologist"
+Repository = "https://github.com/Arkay92/Topologist"
+Documentation = "https://github.com/Arkay92/Topologist#readme"
+Issues = "https://github.com/Arkay92/Topologist/issues"
 
 [project.scripts]
 topologist = "topologist.cli:app"

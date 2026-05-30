@@ -78,7 +78,8 @@ class RedisStreamAdapter(EventStreamAdapter):
                 "redis is required for Redis Streams ingestion. "
                 "Install with `pip install topologist[streaming]`."
             ) from exc
-        self.redis = await redis_async.from_url("redis://localhost:6379")
+        self.redis = redis_async.from_url("redis://localhost:6379")
+        await self.redis.ping()
 
     async def consume(self) -> None:
         if self.redis is None:
@@ -87,10 +88,16 @@ class RedisStreamAdapter(EventStreamAdapter):
         while True:
             messages = await self.redis.xread({self.stream_key: last_id}, block=1000, count=10)
             for _, entries in messages:
-                for _, entry in entries:
-                    event = self.parse_message(entry.get(b"data", b"{}").decode("utf-8"))
+                for message_id, entry_dict in entries:
+                    # extract data field from the entry dict
+                    data = entry_dict.get(b"data", b"{}")
+                    event = self.parse_message(data)
                     self.process_event(event)
-                    last_id = entry[b"id"].decode("utf-8")
+                    # update last_id for next read
+                    if isinstance(message_id, bytes):
+                        last_id = message_id.decode("utf-8")
+                    else:
+                        last_id = message_id
             await asyncio.sleep(0.1)
 
     async def close(self) -> None:
