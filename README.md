@@ -1,7 +1,7 @@
 # Topologist
 
 <p align="center">
-  ![](https://github.com/Arkay92/Topologist/raw/main/assets/Topologist.png)
+  <img width="300" height="300" alt="" src="https://github.com/Arkay92/Topologist/raw/main/assets/Topologist.png" />
 </p>
 
 A production-hardened **hyperdimensional neuro-symbolic topology system** in Python.
