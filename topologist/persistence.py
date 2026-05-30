@@ -4,9 +4,11 @@ import json
 import sqlite3
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from topologist.models import EdgeRecord, NodeRecord
+if TYPE_CHECKING:
+    from topologist.config import TopologistConfig
+    from topologist.engine import Topologist
 
 
 class PersistenceAdapter(ABC):
@@ -74,8 +76,6 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
             )
 
     def save(self, topology: "Topologist") -> None:
-        from topologist.engine import Topologist
-
         with self.connection:
             self.connection.execute("DELETE FROM config")
             self.connection.execute("DELETE FROM hdc_memory")
@@ -127,7 +127,6 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
 
     def load(self) -> "Topologist":
         from topologist.engine import Topologist
-        from topologist.hdc import HyperVectorSpace
 
         cursor = self.connection.cursor()
 
@@ -191,13 +190,13 @@ class SQLitePersistenceAdapter(PersistenceAdapter):
 class PostgresPersistenceAdapter(PersistenceAdapter):
     def __init__(self, dsn: str) -> None:
         try:
-            import psycopg2  # type: ignore
+            import psycopg2
         except ImportError as exc:
             raise ImportError(
                 "psycopg2-binary is required for Postgres persistence. "
                 "Install with `pip install topologist[db]`."
             ) from exc
-        self._psycopg2 = psycopg2
+        self._psycopg2: Any = psycopg2
         self.dsn = dsn
         self.connection = self._psycopg2.connect(dsn)
         self._initialize()

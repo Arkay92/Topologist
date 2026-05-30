@@ -6,12 +6,15 @@ from typing import Any
 from topologist.engine import Topologist
 
 try:
-    import torch  # type: ignore
-    from torch_geometric.data import Data  # type: ignore
+    import torch as _torch
+    from torch_geometric.data import Data as _Data
+
+    torch: Any = _torch
+    Data: Any = _Data
     PYTORCH_GEOMETRIC_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
-    torch = None  # type: ignore[assignment]
-    Data = None  # type: ignore[assignment]
+    torch = None
+    Data = None
     PYTORCH_GEOMETRIC_AVAILABLE = False
 
 
@@ -25,7 +28,7 @@ class PyGBridge:
     def is_available() -> bool:
         return PYTORCH_GEOMETRIC_AVAILABLE
 
-    def to_pyg_data(self) -> "Data":
+    def to_pyg_data(self) -> Any:
         if not PYTORCH_GEOMETRIC_AVAILABLE or torch is None or Data is None:
             raise ImportError(
                 "PyTorch Geometric is not installed."
@@ -57,7 +60,7 @@ class PyGBridge:
         return Data(x=x_tensor, edge_index=edge_index_tensor, edge_attr=edge_attr_tensor)
 
     @classmethod
-    def from_pyg_data(cls, data: "Data") -> Topologist:
+    def from_pyg_data(cls, data: Any) -> Topologist:
         raise NotImplementedError(
             "Deserializing PyG Data into a Topologist instance is not implemented yet."
         )

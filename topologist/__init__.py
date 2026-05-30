@@ -38,7 +38,8 @@ __all__ = [
 ]
 
 try:
-    from importlib.metadata import version, PackageNotFoundError
+    from importlib.metadata import version
+
     __version__ = version("topologist")
 except Exception:
-    __version__ = "0.1.9"
+    __version__ = "0.1.10"

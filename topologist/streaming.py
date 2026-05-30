@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 from topologist.engine import Topologist
 
@@ -31,7 +31,7 @@ class EventStreamAdapter(ABC):
     def parse_message(self, message: str | bytes) -> dict[str, Any]:
         if isinstance(message, bytes):
             message = message.decode("utf-8")
-        return json.loads(message)
+        return cast(dict[str, Any], json.loads(message))
 
 
 class KafkaStreamAdapter(EventStreamAdapter):
@@ -39,11 +39,11 @@ class KafkaStreamAdapter(EventStreamAdapter):
         super().__init__(topology)
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
-        self.consumer = None
+        self.consumer: Any = None
 
     async def connect(self) -> None:
         try:
-            from aiokafka import AIOKafkaConsumer  # type: ignore
+            from aiokafka import AIOKafkaConsumer
         except ImportError as exc:
             raise ImportError(
                 "aiokafka is required for Kafka streaming. "
@@ -68,11 +68,11 @@ class RedisStreamAdapter(EventStreamAdapter):
     def __init__(self, topology: Topologist, stream_key: str = "topology:events") -> None:
         super().__init__(topology)
         self.stream_key = stream_key
-        self.redis = None
+        self.redis: Any = None
 
     async def connect(self) -> None:
         try:
-            import redis.asyncio as redis_async  # type: ignore
+            import redis.asyncio as redis_async
         except ImportError as exc:
             raise ImportError(
                 "redis is required for Redis Streams ingestion. "
@@ -109,11 +109,11 @@ class WebSocketStreamAdapter(EventStreamAdapter):
     def __init__(self, topology: Topologist, uri: str = "ws://localhost:8000/events") -> None:
         super().__init__(topology)
         self.uri = uri
-        self.connection = None
+        self.connection: Any = None
 
     async def connect(self) -> None:
         try:
-            import websockets  # type: ignore
+            import websockets
         except ImportError as exc:
             raise ImportError(
                 "websockets is required for WebSocket streaming. "

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import networkx as nx
 import numpy as np
@@ -12,6 +12,9 @@ from topologist.config import TopologistConfig
 from topologist.exceptions import NodeNotFoundError, PersistenceError
 from topologist.hdc import BipolarVector, HyperVectorSpace
 from topologist.models import EdgeRecord, NodeRecord, ReasoningRule
+
+if TYPE_CHECKING:
+    from topologist.dsl import MultiHopRule
 
 logger = logging.getLogger(__name__)
 
@@ -259,8 +262,14 @@ class Topologist:
         target = str(event.get("target", "")).strip()
         if not source or not relation or not target:
             raise ValueError("Event must include source, relation, and target.")
-        weight = float(event.get("weight", self.config.default_weight))
-        confidence = float(event.get("confidence", self.config.default_confidence))
+        raw_weight = event.get("weight", self.config.default_weight)
+        raw_confidence = event.get("confidence", self.config.default_confidence)
+        weight = self.config.default_weight if raw_weight is None else float(raw_weight)
+        confidence = (
+            self.config.default_confidence
+            if raw_confidence is None
+            else float(raw_confidence)
+        )
         metadata = event.get("metadata", {}) or {}
         return self.add_edge(source, relation, target, weight=weight, confidence=confidence, **metadata)
 

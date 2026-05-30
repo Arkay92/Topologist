@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from typing import Any
 
 from topologist.engine import Topologist
 
 try:
-    from annoy import AnnoyIndex  # type: ignore
+    from annoy import AnnoyIndex as _AnnoyIndex
+
+    AnnoyIndex: Any = _AnnoyIndex
     ANNOY_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
-    AnnoyIndex = None  # type: ignore[assignment]
+    AnnoyIndex = None
     ANNOY_AVAILABLE = False
 
 
@@ -20,8 +23,8 @@ class ApproximateNearestNeighbor:
         self.topology = topology
         self.use_annoy = use_annoy and ANNOY_AVAILABLE
         self.metric = metric
-        self.index = None
-        self.vector_store: dict[str, np.ndarray] = {}
+        self.index: Any = None
+        self.vector_store: dict[str, NDArray[Any]] = {}
 
     def build_index(self) -> None:
         self.vector_store = {
@@ -35,7 +38,7 @@ class ApproximateNearestNeighbor:
             index.build(10)
             self.index = index
 
-    def query(self, query: str | np.ndarray, top_k: int = 5) -> list[tuple[str, float]]:
+    def query(self, query: str | NDArray[Any], top_k: int = 5) -> list[tuple[str, float]]:
         if isinstance(query, str):
             query_vector = self.topology.hdc.get(f"node::{query}")
         else:

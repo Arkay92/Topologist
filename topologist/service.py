@@ -2,13 +2,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from topologist.engine import Topologist
+
+
+class IngestEvent(BaseModel):
+    source: str
+    relation: str
+    target: str
+    weight: float | None = None
+    confidence: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class RuleRequest(BaseModel):
+    rule_expression: str
 
 
 def create_app(topology: Topologist | None = None) -> Any:
     try:
-        from fastapi import FastAPI, Body, HTTPException  # type: ignore
-        from pydantic import BaseModel  # type: ignore
+        from fastapi import FastAPI, Body, HTTPException
     except ImportError as exc:
         raise ImportError(
             "FastAPI is required to create the Topologist service. "
@@ -18,32 +32,17 @@ def create_app(topology: Topologist | None = None) -> Any:
     topology = topology or Topologist()
     app = FastAPI(title="Topologist Service")
 
-    from pydantic import Field
-
-    class IngestEvent(BaseModel):
-        source: str
-        relation: str
-        target: str
-        weight: float | None = None
-        confidence: float | None = None
-        metadata: dict[str, Any] = Field(default_factory=dict)
-
-    class RuleRequest(BaseModel):
-        rule_expression: str
-
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/ingest")
-    def ingest(event: IngestEvent) -> dict[str, Any]:
+    def ingest(event: IngestEvent = Body(...)) -> dict[str, Any]:
         result = topology.ingest_event(event.model_dump())
         return {"success": result}
 
     @app.post("/rule")
-    def apply_rule(rule_request: RuleRequest) -> dict[str, Any]:
-        from topologist.dsl import RuleDSL
-
+    def apply_rule(rule_request: RuleRequest = Body(...)) -> dict[str, Any]:
         try:
             count = topology.apply_dsl_rule(rule_request.rule_expression)
         except ValueError as exc:
