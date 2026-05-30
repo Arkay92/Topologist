@@ -95,6 +95,75 @@ def test_explain_edge_returns_none_for_missing_edge() -> None:
     assert topo.explain_edge("A", "missing", "B") is None
 
 
+def test_detect_contradictions_reports_conflicting_edges_with_provenance() -> None:
+    topo = Topologist()
+    topo.add_edge(
+        "service_api",
+        "is_safe",
+        "public_endpoint",
+        confidence=0.9,
+        source_type="user",
+        evidence=["manual-review"],
+    )
+    topo.add_edge(
+        "service_api",
+        "is_risky",
+        "public_endpoint",
+        confidence=0.7,
+        source_type="sensor",
+        evidence=["scanner"],
+    )
+
+    contradictions = topo.detect_contradictions()
+
+    assert len(contradictions) == 1
+    report = contradictions[0]
+    assert report["source"] == "service_api"
+    assert report["target"] == "public_endpoint"
+    assert set(report["relations"]) == {"is_safe", "is_risky"}
+    assert report["severity"] == pytest.approx(0.7)
+    assert report["left"]["evidence"] or report["right"]["evidence"]
+
+
+def test_revise_belief_decays_old_edge_and_records_contradiction() -> None:
+    topo = Topologist()
+    topo.add_edge("service_api", "is_safe", "public_endpoint", confidence=0.8)
+
+    result = topo.revise_belief(
+        old=("service_api", "is_safe", "public_endpoint"),
+        new=("service_api", "is_risky", "public_endpoint"),
+        evidence="scanner finding",
+        new_confidence=0.9,
+    )
+
+    old_explanation = topo.explain_edge("service_api", "is_safe", "public_endpoint")
+    new_explanation = topo.explain_edge("service_api", "is_risky", "public_endpoint")
+    contradiction = topo.explain_edge("service_api", "contradicts", "public_endpoint")
+
+    assert old_explanation["confidence"] == pytest.approx(0.4)
+    assert "scanner finding" in old_explanation["evidence"]
+    assert new_explanation["confidence"] == pytest.approx(0.9)
+    assert new_explanation["metadata"]["revision_of"] == [
+        "service_api",
+        "is_safe",
+        "public_endpoint",
+    ]
+    assert contradiction is not None
+    assert contradiction["metadata"]["revised_relation"] == "is_safe"
+    assert result["contradictions"]
+
+
+def test_revise_belief_rejects_missing_old_edge() -> None:
+    topo = Topologist()
+
+    with pytest.raises(ValueError, match="Cannot revise missing edge"):
+        topo.revise_belief(
+            old=("A", "is_safe", "B"),
+            new=("A", "is_risky", "B"),
+            evidence="scanner finding",
+        )
+
+
 def test_save_load_roundtrip(tmp_path: Path) -> None:
     topo = Topologist()
     topo.add_edge("HDC", "models", "Memory", source_type="user", evidence=["readme"])

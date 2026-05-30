@@ -2,6 +2,13 @@
 
 All notable changes to Topologist are documented here.
 
+## 0.2.3
+
+- Added direct contradiction detection for conflicting relations on the same source and target.
+- Added `Topologist.revise_belief()` to decay stale beliefs, add replacement evidence, and record contradiction provenance.
+- Confirmed Redis Streams ingestion uses returned stream message IDs and a non-awaited `from_url()` constructor.
+- Added `.coverage` to `.gitignore` and removed generated coverage output from the working tree.
+
 ## 0.2.0
 
 - Added provenance records for edges, including source type, evidence, timestamps, reinforcement count, decay policy, trust score, and derived-rule traces.

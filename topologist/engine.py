@@ -18,6 +18,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONTRADICTION_PAIRS: tuple[tuple[str, str], ...] = (
+    ("is_safe", "is_risky"),
+    ("is_safe", "is_dangerous"),
+    ("safe", "risky"),
+    ("safe", "dangerous"),
+    ("confirms", "contradicts"),
+    ("supports", "contradicts"),
+    ("enables", "prevents"),
+    ("requires", "forbids"),
+    ("allows", "forbids"),
+)
+
 
 class Topologist:
     """Production-oriented hyperdimensional neuro-symbolic topology engine."""
@@ -478,6 +490,119 @@ class Topologist:
                 "updated_at": provenance.updated_at.isoformat(),
                 "metadata": data.get("metadata", {}),
             }
+        return None
+
+    def detect_contradictions(
+        self,
+        contradiction_pairs: list[tuple[str, str]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Find directly conflicting relations between the same source and target."""
+        pairs = contradiction_pairs or list(DEFAULT_CONTRADICTION_PAIRS)
+        conflicts = {pair for pair in pairs} | {(right, left) for left, right in pairs}
+        reports: list[dict[str, Any]] = []
+        seen: set[tuple[str, str, str, str]] = set()
+
+        for source, target in self.graph.edges():
+            edge_data = list(self.graph.get_edge_data(source, target, default={}).values())
+            for left in edge_data:
+                left_relation = str(left.get("relation", ""))
+                for right in edge_data:
+                    right_relation = str(right.get("relation", ""))
+                    if left_relation == right_relation:
+                        continue
+                    if (left_relation, right_relation) not in conflicts:
+                        continue
+                    first_relation, second_relation = sorted((left_relation, right_relation))
+                    key = (first_relation, second_relation, str(source), str(target))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    left_explanation = self.explain_edge(str(source), left_relation, str(target))
+                    right_explanation = self.explain_edge(str(source), right_relation, str(target))
+                    reports.append(
+                        {
+                            "source": source,
+                            "target": target,
+                            "relations": [left_relation, right_relation],
+                            "left": left_explanation,
+                            "right": right_explanation,
+                            "severity": min(
+                                float(left.get("confidence", 1.0)),
+                                float(right.get("confidence", 1.0)),
+                            ),
+                        }
+                    )
+        return reports
+
+    def revise_belief(
+        self,
+        old: tuple[str, str, str],
+        new: tuple[str, str, str],
+        evidence: str,
+        *,
+        source_type: str = "revision",
+        old_confidence_factor: float = 0.5,
+        new_confidence: float | None = None,
+        trust_score: float = 1.0,
+    ) -> dict[str, Any]:
+        """Revise a relation by weakening the old edge and adding replacement evidence."""
+        old_source, old_relation, old_target = old
+        new_source, new_relation, new_target = new
+        old_edge = self._edge_data(old_source, old_relation, old_target)
+        if old_edge is None:
+            raise ValueError(f"Cannot revise missing edge: {old_source} --{old_relation}--> {old_target}")
+
+        old_edge["confidence"] = max(
+            0.0,
+            min(1.0, float(old_edge.get("confidence", 1.0)) * old_confidence_factor),
+        )
+        old_edge["provenance"] = self._merge_provenance(
+            old_edge.get("provenance", {}),
+            ProvenanceRecord(
+                source_type=source_type,
+                evidence=[evidence],
+                trust_score=trust_score,
+            ),
+        )
+
+        replacement_confidence = (
+            self.config.default_confidence
+            if new_confidence is None
+            else new_confidence
+        )
+        self.add_edge(
+            new_source,
+            new_relation,
+            new_target,
+            confidence=replacement_confidence,
+            source_type=source_type,
+            evidence=[evidence],
+            trust_score=trust_score,
+            revision_of=list(old),
+        )
+        self.add_edge(
+            old_source,
+            "contradicts",
+            old_target,
+            confidence=min(float(old_edge.get("confidence", 1.0)), replacement_confidence),
+            source_type=source_type,
+            evidence=[evidence],
+            trust_score=trust_score,
+            revised_relation=old_relation,
+            revised_by=list(new),
+        )
+        self.global_state = None
+        return {
+            "old": self.explain_edge(old_source, old_relation, old_target),
+            "new": self.explain_edge(new_source, new_relation, new_target),
+            "contradictions": self.detect_contradictions(),
+        }
+
+    def _edge_data(self, source: str, relation: str, target: str) -> dict[str, Any] | None:
+        edge_data = self.graph.get_edge_data(source, target, default={})
+        for data in edge_data.values():
+            if data.get("relation") == relation:
+                return cast(dict[str, Any], data)
         return None
 
     def relation_anomaly_score(self, source: str, relation: str, target: str) -> float:

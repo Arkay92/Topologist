@@ -256,6 +256,25 @@ topology.explain_edge("A", "supports", "B")
 
 Inferred edges include the rule and evidence path used to derive them.
 
+### 8. Contradiction detection and belief revision
+
+Topologist can flag directly conflicting relations and revise stale beliefs while preserving evidence:
+
+```python
+topology.add_edge("service_api", "is_safe", "public_endpoint", confidence=0.8)
+topology.add_edge("service_api", "is_risky", "public_endpoint", confidence=0.9)
+
+topology.detect_contradictions()
+
+topology.revise_belief(
+    old=("service_api", "is_safe", "public_endpoint"),
+    new=("service_api", "is_risky", "public_endpoint"),
+    evidence="scanner finding",
+)
+```
+
+Belief revision lowers the old edge confidence, adds the replacement edge, records a `contradicts` relation, and keeps provenance for the revision evidence.
+
 ---
 
 ## Project Structure
