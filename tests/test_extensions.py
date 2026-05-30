@@ -114,4 +114,4 @@ def test_rule_dsl_fails_on_invalid_expression() -> None:
 def test_version_matches_package_metadata() -> None:
     """Ensure __version__ matches pyproject.toml."""
     import topologist
-    assert topologist.__version__ == "0.1.10"
+    assert topologist.__version__ == "0.1.11"
