@@ -252,6 +252,79 @@ class Topologist:
     def apply_rules(self, rules: list[ReasoningRule]) -> int:
         return sum(self.apply_rule(rule) for rule in rules)
 
+    def ingest_event(self, event: dict[str, Any]) -> bool:
+        """Ingest a generic topology event into the engine."""
+        source = str(event.get("source", "")).strip()
+        relation = str(event.get("relation", "")).strip()
+        target = str(event.get("target", "")).strip()
+        if not source or not relation or not target:
+            raise ValueError("Event must include source, relation, and target.")
+        weight = float(event.get("weight", self.config.default_weight))
+        confidence = float(event.get("confidence", self.config.default_confidence))
+        metadata = event.get("metadata", {}) or {}
+        return self.add_edge(source, relation, target, weight=weight, confidence=confidence, **metadata)
+
+    def apply_multi_hop_rule(self, rule: "MultiHopRule") -> int:
+        created = 0
+        proposals: list[tuple[str, str, float]] = []
+
+        def traverse(current_node: str, relation_index: int, confidence: float, start_node: str) -> None:
+            if relation_index >= len(rule.relation_sequence):
+                proposals.append((start_node, current_node, confidence))
+                return
+            relation = rule.relation_sequence[relation_index]
+            for _, next_node, data in self.graph.out_edges(current_node, data=True):
+                if data.get("relation") != relation:
+                    continue
+                next_confidence = confidence * float(data.get("confidence", 1.0))
+                traverse(next_node, relation_index + 1, next_confidence, start_node)
+
+        for start_node in list(self.graph.nodes()):
+            traverse(start_node, 0, 1.0, start_node)
+
+        for source, target, confidence in proposals:
+            if self.add_edge(
+                source,
+                rule.inferred_relation,
+                target,
+                confidence=confidence,
+                inferred=True,
+                rule=rule.model_dump(),
+            ):
+                created += 1
+
+        return created
+
+    def apply_dsl_rule(self, expression: str) -> int:
+        from topologist.dsl import RuleDSL
+
+        rule = RuleDSL.parse(expression)
+        return self.apply_multi_hop_rule(rule)
+
+    def summarize_topology(self) -> str:
+        nodes = sorted(self.graph.nodes())
+        edges = [
+            f"{source}-[{data.get('relation', 'related_to')}]->{target}"
+            for source, target, data in self.graph.edges(data=True)
+        ]
+        return f"nodes: {', '.join(nodes)}\nedges: {', '.join(edges)}"
+
+    def save_to_sqlite(self, path: str | Path) -> None:
+        from topologist.persistence import SQLitePersistenceAdapter
+
+        adapter = SQLitePersistenceAdapter(path)
+        adapter.save(self)
+        adapter.close()
+
+    @classmethod
+    def load_from_sqlite(cls, path: str | Path) -> "Topologist":
+        from topologist.persistence import SQLitePersistenceAdapter
+
+        adapter = SQLitePersistenceAdapter(path)
+        topology = adapter.load()
+        adapter.close()
+        return topology
+
     # -----------------------------
     # Topological analytics
     # -----------------------------

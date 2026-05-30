@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "topologist"
-version = "0.1.7"
+version = "0.1.8"
 description = "A production-hardened hyperdimensional neuro-symbolic topology system."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,6 +39,30 @@ dev = [
     "mypy>=1.8",
     "build>=1.0",
     "twine>=4.0",
+]
+
+gnn = [
+    "torch>=2.0",
+    "torch-geometric>=2.3"
+]
+streaming = [
+    "aiokafka>=0.8",
+    "redis>=4.0",
+    "websockets>=11.0"
+]
+ann = [
+    "annoy>=1.18"
+]
+api = [
+    "fastapi>=0.100",
+    "uvicorn>=0.23"
+]
+telemetry = [
+    "opentelemetry-api>=1.14",
+    "opentelemetry-sdk>=1.14"
+]
+db = [
+    "psycopg2-binary>=2.9"
 ]
 
 [project.urls]

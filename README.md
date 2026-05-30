@@ -244,21 +244,6 @@ This package includes:
 
 ---
 
-## Good next upgrades
-
-Useful next layers would be:
-
-1. PyTorch Geometric bridge for GNN message passing.
-2. Streaming event ingestion from Kafka, Redis Streams, or WebSockets.
-3. Approximate nearest-neighbour search for large item memories.
-4. Rule DSL with richer multi-hop inference.
-5. OpenTelemetry tracing.
-6. FastAPI service wrapper.
-7. SQLite/Postgres persistence adapter.
-8. Agent memory adapter for Claude Code, OpenClaw, or local LLM agents.
-
----
-
 ## License
 
 MIT
